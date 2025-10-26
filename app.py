@@ -170,7 +170,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 백엔드 API URL (Streamlit Secrets 사용, 없으면 로컬 기본값)
-BACKEND_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")
+try:
+    BACKEND_URL = st.secrets.get("BACKEND_URL")
+except Exception as e:
+    BACKEND_URL = "http://localhost:8000"
 
 # 세션 상태 초기화
 if 'generated_result' not in st.session_state:
