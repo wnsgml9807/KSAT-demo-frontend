@@ -28,6 +28,7 @@ st.markdown("""
         padding: 12px;
         margin-bottom: 20px;
         font-family: 'Nanum Myeongjo', serif !important;
+        font-size: 16.5px;
         line-height: 1.7;
         letter-spacing: -0.01em;
         font-weight: 500;
@@ -240,6 +241,14 @@ def render_progress_panel():
                     spinner_html = ''
                     badge_html = '<span style="background-color: #4caf50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em; font-weight: 500;">완료</span>'
                     text_style = 'font-size: 0.95em; color: #999;'
+                elif status == 'error':
+                    spinner_html = ''
+                    badge_html = '<span style="background-color: #f44336; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.85em; font-weight: 500;">❌ 오류</span>'
+                    text_style = 'font-size: 0.95em; color: #f44336;'
+                else:
+                    spinner_html = ''
+                    badge_html = ''
+                    text_style = 'font-size: 0.95em;'
                 
                 # 행 표시 (스피너 + 레이블 + 배지)
                 st.markdown(
@@ -557,7 +566,16 @@ def show_generation_dialog():
                                     render_progress_panel()
                             
                             elif data['type'] == 'error':
-                                st.error(f"생성 중 오류: {data['message']}")
+                                # 진행 중이던 태스크를 error 상태로 변경
+                                for task in st.session_state.progress_tasks:
+                                    if task['status'] == 'in_progress':
+                                        task['status'] = 'error'
+                                
+                                with progress_container.container():
+                                    render_progress_panel()
+                                
+                                # 에러 메시지 표시
+                                st.error(f"❌ {data['message']}")
         
         except Exception as e:
             st.error(f"백엔드 서버와 연결할 수 없습니다: {str(e)}")
@@ -627,11 +645,11 @@ with col1:
                     )
                     
                     # 행 선택 (라디오 버튼 또는 숫자 입력)
-                    col_select, col_load = st.columns([3, 1])
+                    col_select, col_load, col_delete = st.columns([2, 1, 1], gap="small")
                     
                     with col_select:
                         selected_idx = st.number_input(
-                            "불러올 파일 번호",
+                            "파일 번호",
                             min_value=1,
                             max_value=len(files_metadata),
                             value=1,
@@ -657,6 +675,26 @@ with col1:
                                     st.error(f"파일 불러오기 실패: {file_response.status_code}")
                             except Exception as e:
                                 st.error(f"파일 불러오기 실패: {str(e)}")
+                    
+                    with col_delete:
+                        if st.button("삭제", width="stretch", type="secondary"):
+                            selected_file = files_metadata[selected_idx - 1]['filename']
+                            try:
+                                # 백엔드 API로 파일 삭제
+                                delete_response = requests.delete(
+                                    f"{BACKEND_URL}/api/outputs/{selected_file}",
+                                    timeout=5
+                                )
+                                if delete_response.status_code == 200:
+                                    st.success(f"✅ 삭제 완료!")
+                                    # 현재 불러온 결과가 삭제된 파일이면 초기화
+                                    if st.session_state.get('generated_result'):
+                                        st.session_state.generated_result = None
+                                    st.rerun()
+                                else:
+                                    st.error(f"파일 삭제 실패: {delete_response.status_code}")
+                            except Exception as e:
+                                st.error(f"파일 삭제 실패: {str(e)}")
                 else:
                     st.info("저장된 결과 파일이 없습니다.")
             else:
