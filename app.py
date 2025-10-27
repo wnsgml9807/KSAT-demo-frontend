@@ -208,8 +208,9 @@ def update_task_status(task_label: str, status: str):
 def render_progress_panel():
     """진행 상황 패널 렌더링 (Streamlit 네이티브 컴포넌트 사용)"""
     # 헤더는 항상 표시
-    st.markdown("#### 🔄 진행 현황")
-    
+    st.markdown("### 🔄 진행 현황")
+    st.markdown("> 문항 유형에 따라 생성 순서가 달라질 수 있습니다. 보기형 문항을 우선적으로 생성합니다.", unsafe_allow_html=True)
+
     # progress_tasks가 있을 때만 내부 컨테이너에 진행 상황 표시
     if st.session_state.get('progress_tasks'):
         # 내부 컨테이너로 진행 상황 감싸기
@@ -584,6 +585,46 @@ def show_generation_dialog():
         st.rerun()
 
 
+@st.dialog("파일 삭제 확인", width="small")
+def show_delete_confirmation_dialog():
+    """삭제 확인 다이얼로그"""
+    filename = st.session_state.get('file_to_delete', '')
+    
+    st.warning("삭제 후에는 복구가 불가능합니다. 정말 삭제하시겠습니까?")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        cancel_clicked = st.button("취소", width="stretch", type="secondary")
+    
+    with col2:
+        delete_clicked = st.button("삭제", width="stretch", type="primary")
+    
+    if cancel_clicked:
+        st.session_state.file_to_delete = None
+        st.rerun()
+    
+    if delete_clicked:
+        try:
+            # 백엔드 API로 파일 삭제
+            delete_response = requests.delete(
+                f"{BACKEND_URL}/api/outputs/{filename}",
+                timeout=5
+            )
+            if delete_response.status_code == 200:
+                st.success("삭제 완료!")
+                # 현재 불러온 결과가 삭제된 파일이면 초기화
+                if st.session_state.get('generated_result'):
+                    st.session_state.generated_result = None
+                st.session_state.file_to_delete = None
+                time.sleep(0.5)  # 성공 메시지 표시 시간
+                st.rerun()
+            else:
+                st.error(f"파일 삭제 실패: {delete_response.status_code}")
+        except Exception as e:
+            st.error(f"파일 삭제 실패: {str(e)}")
+
+
 # 로고 이미지 로드 및 base64 인코딩
 logo_path = Path(__file__).parent / "logo_kangnam_202111.png"
 if logo_path.exists():
@@ -679,22 +720,8 @@ with col1:
                     with col_delete:
                         if st.button("삭제", width="stretch", type="secondary"):
                             selected_file = files_metadata[selected_idx - 1]['filename']
-                            try:
-                                # 백엔드 API로 파일 삭제
-                                delete_response = requests.delete(
-                                    f"{BACKEND_URL}/api/outputs/{selected_file}",
-                                    timeout=5
-                                )
-                                if delete_response.status_code == 200:
-                                    st.success(f"✅ 삭제 완료!")
-                                    # 현재 불러온 결과가 삭제된 파일이면 초기화
-                                    if st.session_state.get('generated_result'):
-                                        st.session_state.generated_result = None
-                                    st.rerun()
-                                else:
-                                    st.error(f"파일 삭제 실패: {delete_response.status_code}")
-                            except Exception as e:
-                                st.error(f"파일 삭제 실패: {str(e)}")
+                            st.session_state.file_to_delete = selected_file
+                            show_delete_confirmation_dialog()
                 else:
                     st.info("저장된 결과 파일이 없습니다.")
             else:
